@@ -65,17 +65,17 @@ A list of CIKs:
 List of CIKs -> crawl.py -> List of URLs
 
 List of URLs -> fetch.py ---> List of filenames
-						  |
-						  --> Local text files as cached files in the folder 'CIK'
+			  |
+			  --> Local text files as cached files in the folder 'CIK'
 
 Cached files(CIK) -->
-				    |
+		    |
 List of filenames ---> parse.py ---> List of filenames
-							     |
-							     --> Parsed text files as cached files in the folder 'LOAD'
+				 |
+				 --> Parsed text files as cached files in the folder 'LOAD'
 
 Cached files(LOAD) ->
-				    |
+		    |
 List of filenames ---> store.py -> records in MySQL database
 
 [Benchmarks] 
