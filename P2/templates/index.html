@@ -1,0 +1,541 @@
+<!DOCTYPE html>
+    <head>
+        <meta charset="utf-8">
+        <!-- Load d3.js -->
+        <script src="https://d3js.org/d3.v4.js"></script>
+        <!-- Color Scale -->
+        <script src="https://d3js.org/d3-scale-chromatic.v1.min.js"></script>
+    </head>
+    <body>
+        <!-- Initialize a select button -->
+        <select id="ria_select"></select>
+        <div id="ria_graph"></div>
+        <!-- Initialize a select button -->
+        <select id="sec_select"></select>
+        <div id="sec_graph"></div>
+        <script>
+            formatAsInt = d3.format(",");
+
+            let riaData = {{ data.ria_data|safe }};
+            let secData = {{ data.sec_data|safe }};
+            let qtr = end = {{ data.end|safe }};
+            let cik = riaData.slice(-1)[0].cik
+
+            let secDict = {};
+            secData.forEach(sec => {
+                if (!(sec.quarter in secDict)) {
+                    secDict[sec.quarter] = [];
+                }
+                secDict[sec.quarter].push(sec);
+            })
+            
+            // Draw the line chart
+            function drawLine(data) {
+                data.sort((a, b) => {
+                    return a.quarter > b.quarter ? 1 : -1;
+                })
+
+                // Set the dimensions and margins of the graph
+                let margin = {top: 10, right: 30, bottom: 30, left: 90},
+                    width = 3.5 * (420 - margin.left - margin.right),
+                    height = 340 - margin.top - margin.bottom;
+
+                // Append the svg object to the body of the page
+                let svg = d3.select("#ria_graph")
+                            .append("svg")
+                            .attr("width", width + margin.left + margin.right)
+                            .attr("height", height + margin.top + margin.bottom)
+                            .append("g")
+                            .attr("transform", "translate(" + margin.left + "," + margin.top + ")");
+
+                // List of groups (One group per column)
+                let group = ["value", "shares", "number of securities", "change of values", "change of shares"];
+
+                // Add the options to the button
+                d3.select("#ria_select")
+                    .selectAll("options")
+                    .data(group)
+                    .enter()
+                    .append("option")
+                    .text(function (d) { return d; }) // Texts showed in the menu
+                    .attr("value", function (d) { return d; }); // Corresponding values returned by the button
+
+                // Color scale (One color per each group)
+                let colors = d3.scaleOrdinal()
+                                .domain(group)
+                                .range(d3.schemeTableau10);
+
+                // Add X axis
+                let x = d3.scalePoint()
+                        .range([ 0, width ]);
+
+                let xAxis = d3.axisBottom(x);
+                svg.append("g")
+                .attr("transform", "translate(0," + height + ")")
+                .attr("class", "xAxis");
+
+                // Add Y axis
+                let y = d3.scaleLinear().range([height, 0]);
+
+                let yAxis = d3.axisLeft(y);
+                svg.append("g")
+                .attr("class", "yAxis");
+
+                // Add the line
+                let line = svg.append("g").append("path");
+
+                // Add the points
+                let dot = svg.append("g").selectAll("circle");
+
+                // Function that updates the chart
+                function update(selected) {
+                    // Create new data with the selections
+                    let dataFilter = data.map(d => {
+                        return {
+                            quarter: d.quarter,
+                            value: selected == "value" ? d.value :
+                                    selected == "shares" ? d.shares :
+                                    selected == "number of securities" ? d.num_sec :
+                                    selected == "change of values" ? d.change_value :
+                                    d.change_shares
+                        };
+                    });
+
+                    // Create the X axis
+                    x.domain(dataFilter.map(d => { return d.quarter; }));
+
+                    if (dataFilter.length > 25) {
+                        let step = Math.trunc(dataFilter.length / 25) + 1;
+                        let ticks = [];
+                        
+                        dataFilter.forEach((d, i) => { if (i % step == 0) ticks.push(d.quarter); });
+                        xAxis.tickValues(ticks);
+                    }
+                    svg.selectAll(".xAxis")
+                        .transition()
+                        .duration(1000)
+                        .call(xAxis);
+
+                    // Create the Y axis
+                    y.domain([
+                        d3.min(dataFilter, function (d) { return +d.value; }),
+                        d3.max(dataFilter, function (d) { return +d.value; })
+                    ]);
+
+                    if (selected == "value") {
+                        yAxis.tickFormat(function (d) { return `$${formatAsInt(d)}`; });
+                    } else if (selected == "shares" || selected == "number of securities") {
+                        yAxis.tickFormat(function (d) { return `${formatAsInt(d)}`; });
+                    } else {
+                        yAxis.tickFormat(function (d) { return d + '%'; });                        
+                    }
+                    svg.selectAll(".yAxis")
+                        .transition()
+                        .duration(1000)
+                        .call(yAxis.ticks(12));
+
+                    // Given new data, update the line
+                    line.datum(dataFilter)
+                        .transition()
+                        .duration(1000)
+                        .attr("d", d3.line()
+                            .curve(d3.curveMonotoneX)
+                            .x(function (d) { return x(d.quarter); })
+                            .y(function (d) { return y(+d.value); })
+                        )
+                        .attr("stroke", function (d) { return colors(selected); })
+                        .attr("stroke-width", 4)
+                        .attr("fill", "none");
+
+                    // Create a tooltip
+                    let tooltip = d3.select("#ria_graph")
+                                    .append("div")
+                                    .attr("class", "tooltip")
+                                    .style("opacity", 0)
+                                    .style("position", "absolute")
+                                    .style("background-color", "white")
+                                    .style("border", "solid")
+                                    .style("border-width", "2px")
+                                    .style("border-radius", "5px")
+                                    .style("padding", "2px");
+                    
+                    let redraw = false;
+
+                    // Functions that change the tooltip when users hover/move/leave/click dots
+                    let mouseover = function (d) {
+                        if (redraw == true) {
+                            tooltip = d3.select("#ria_graph")
+                                        .append("div")
+                                        .attr("class", "tooltip")
+                                        .style("opacity", 0)
+                                        .style("position", "absolute")
+                                        .style("background-color", "white")
+                                        .style("border", "solid")
+                                        .style("border-width", "2px")
+                                        .style("border-radius", "5px")
+                                        .style("padding", "2px");
+                            redrew = false;
+                        }
+                        tooltip.style("opacity", 1);
+                        d3.select(this).style("stroke", "black").style("opacity", 1);
+                    }
+                    let mousemove = function (d) {
+                        let label = selected == "value"
+                                    ? `$${formatAsInt(d.value)} (${d.quarter})`
+                                    : selected == "shares" || selected == "number of securities"
+                                    ? `${formatAsInt(d.value)} (${d.quarter})`
+                                    : `${d.value.toFixed(5)}% (${d.quarter})`;
+
+                        tooltip.html(label)
+                            .style("width", label.length * 8 + "px")
+                            .style("left", (d3.mouse(this)[0] + 60) + "px")
+                            .style("top", (d3.mouse(this)[1] + 60) + "px");
+                    }
+                    let mouseleave = function (d) {
+                        tooltip.style("opacity", 0);
+                        d3.select(this).style("stroke", "#69b3a2").style("opacity", 0.8);
+                        d3.selectAll("#ria_graph div").remove();
+                        redraw = true;
+                    }
+
+                    let click = function (d) {
+                        d3.selectAll("#sec_select option").remove();
+                        d3.selectAll("#sec_graph svg").remove();
+                        d3.selectAll("#sec_graph div").remove();
+                        d3.selectAll(".info").remove()
+                        drawPie(secDict[d.quarter]);
+                        drawDoughnut(secDict[d.quarter]);
+                        drawHolder(cik, d.quarter);
+                    }
+
+                    svg.selectAll("circle").remove();
+                    dot.data(dataFilter)
+                        .enter()
+                        .append("circle")
+                        .on("mouseover", mouseover)
+                        .on("mousemove", mousemove)
+                        .on("mouseleave", mouseleave)
+                        .on("click", click)
+                        .transition()
+                        .duration(1000)
+                        .attr("cx", function (d) { return x(d.quarter); } )
+                        .attr("cy",  function (d) { return y(+d.value); } )
+                        .attr("r", 6.5)
+                        .attr("stroke", "#69b3a2")
+                        .style("stroke-width", 3)
+                        .attr("fill", "white");
+                }
+
+                // When the button is changed, run the update function
+                d3.select("#ria_select").on("change", function (d) {
+                    // Recover the option that has been chosen
+                    let selected = d3.select(this).property("value");
+                    // Run the update function with this selected option
+                    update(selected);
+                });
+
+                update("value");
+            }
+
+            drawLine(riaData);
+
+            // Draw the pie chart
+            function drawPie(data) {
+                let value = {}, shares = {};
+
+                value["Others"] = data.map(sec => sec.value).reduce((acc, curr) => acc + curr);
+                shares["Others"] = data.map(sec => sec.shares).reduce((acc, curr) => acc + curr);
+
+                data.sort((a, b) => {
+                    return b.value - a.value > 0 ? 1 : -1;
+                }).slice(0,9).forEach(sec => {
+                    value["Others"] -= sec.value;
+                    value[sec.security] = sec.value;
+                });
+                data.sort((a, b) => {
+                    return b.value - a.value > 0 ? 1 : -1;
+                }).slice(0,9).forEach(sec => {
+                    shares["Others"] -= sec.shares;
+                    shares[sec.security] = sec.shares;
+                });
+
+                // Set the dimensions and margins of the graph
+                let width = 400, height = 400, margin = 50;
+
+                // The radius of the pie plot is half the width or half the height (Smallest one), and subtract a bit of margin
+                let radius = Math.min(width, height) / 2 - margin;
+
+                // Append the svg object to the div called "sec_graph"
+                let svg = d3.select("#sec_graph")
+                            .append("svg")
+                            .attr("width", width)
+                            .attr("height", height)
+                            .append("g")
+                            .attr("transform", "translate(" + width / 2 + "," + height / 2.5 + ")");
+                
+                // List of groups (One group per column)
+                let group = ["value", "shares"];
+
+                // Add options to the button
+                d3.select("#sec_select")
+                    .selectAll("options")
+                    .data(group)
+                    .enter()
+                    .append("option")
+                    .text(function (d) { return d; }) // Texts shown in the menu
+                    .attr("value", function (d) { return d; }); // Corresponding values returned by the button
+
+                // Function that creates/updates the plot for a given variable
+                function update(selected) { // Compute the position of each group on the pie
+                    // Create new data with the selection
+                    let dataFilter = selected == "value" ? value : shares;
+
+                    // Set the color scale
+                    securities = [];
+                    for (const [key, value] of Object.entries(dataFilter)) {
+                        securities.push(key)
+                    }
+                    let color = d3.scaleOrdinal().domain(securities).range(d3.schemeTableau10);
+
+                    // This function makes sure that the group order remains the same in the pie chart
+                    let pie = d3.pie()
+                                .value(function (d) { return d.value; })
+                                .sort((a, b) => { return d3.ascending(a.key, b.key); });
+
+                    // Map to data
+                    let dataReady = pie(d3.entries(dataFilter));
+                    let u = svg.selectAll("path").data(dataReady);
+
+                    // Create a tooltip
+                    let tooltip = d3.select("#sec_graph")
+                                    .append("div")
+                                    .attr("class", "tooltip")
+                                    .style("opacity", 0)
+                                    .style("position", "absolute")
+                                    .style("background-color", "white")
+                                    .style("border", "solid")
+                                    .style("border-width", "2px")
+                                    .style("border-radius", "5px")
+                                    .style("padding", "2px");
+
+                    // Functions that change the tooltip when users hover/move/leave cells
+                    let mouseover = function (d) {
+                        tooltip.style("opacity", 1);
+                        d3.select(this).style("stroke", "black").style("opacity", 1);
+                    }
+                    let mousemove = function (d) {
+                        let label = selected == "value"
+                                    ? `$${formatAsInt(d.value)} (${d.data.key})`
+                                    : `${formatAsInt(d.value)} (${d.data.key})`;
+
+                        tooltip.html(label)
+                            .style("width", label.length * 9 + "px")
+                            .style("left", 330 + "px")
+                            .style("top", 370 + "px");
+                    }
+                    let mouseleave = function (d) {
+                        tooltip.style("opacity", 0);
+                        d3.select(this).style("stroke", "none").style("opacity", 0.8);
+                    }
+
+                    // Build the pie chart (Basically, each part of the pie is a path built with the arc function)
+                    u.enter()
+                    .append("path")
+                    .merge(u)
+                    .on("mouseover", mouseover)
+                    .on("mousemove", mousemove)
+                    .on("mouseleave", mouseleave)
+                    .transition()
+                    .duration(1000)
+                    .attr("d", d3.arc().innerRadius(0).outerRadius(radius))
+                    .attr("fill", function (d) { return (color(d.data.key)) })
+                    .style("stroke-width", "2px")
+                    .style("opacity", 1);
+
+                    // Remove the group that is not present anymore
+                    u.exit().remove();
+                }
+
+                // When the button is changed, run the update function
+                d3.select("#sec_select").on("change", function (d) {
+                    // Recover the option that has been chosen
+                    let selected = d3.select(this).property("value");
+                    // Run the update function with this selected option
+                    update(selected);
+                });
+
+                // Initialize the plot with the first dataset
+                update("value");
+            }
+
+            drawPie(secDict[end]);
+
+            // Draw the doughnut chart
+            function drawDoughnut(data) {
+                let weighting = {};
+
+                weighting["Others"] = 100.0;
+
+                data.sort((a, b) => {
+                    return b.value - a.value > 0 ? 1 : -1;
+                }).slice(0,9).forEach(sec => {
+                    weighting["Others"] -= sec.weighting;
+                    weighting[sec.security] = sec.weighting;
+                });
+                
+                let margin = {top: 25, right: 25, bottom: 25, left: 25};
+                let width = 350 - margin.left - margin.right,
+                    height = 350 - margin.top - margin.bottom,
+                    outerRadius = Math.min(width, height) / 2,
+                    innerRadius = outerRadius * .999,  
+                    // For animation
+                    innerRadius2 = outerRadius * .5,
+                    innerRadius3 = outerRadius * .45
+
+                // Set the color scale
+                securities = [];
+                for (const [key, value] of Object.entries(weighting)) {
+                    securities.push(key)
+                }
+                let color = d3.scaleOrdinal().domain(securities).range(d3.schemeTableau10);
+
+                let svg = d3.select("#sec_graph")
+                            .append("svg:svg")
+                            .attr("transform", "translate(" + 80 + "," + -90 + ")")
+                            .attr("width", width)
+                            .attr("height", height)
+                            .append("svg:g")
+                            .attr("transform", "translate(" + outerRadius + "," + outerRadius + ")");
+                            
+                let arc = d3.arc().outerRadius(outerRadius).innerRadius(0);
+    
+                // For animation
+                let arc2 =  d3.arc().innerRadius(innerRadius2).outerRadius(outerRadius);
+                let arc3 =  d3.arc().innerRadius(innerRadius3).outerRadius(outerRadius);  
+                
+                let pie = d3.pie()
+                            .value(function (d) { return d.value; })
+                            .sort((a, b) => { return d3.ascending(a.key, b.key); });
+                let dataReady = pie(d3.entries(weighting));
+
+                // Create a tooltip
+                let tooltip = d3.select("#sec_graph")
+                                .append("div")
+                                .style("opacity", 0)
+                                .attr("class", "tooltip")
+                                .style("position", "absolute")
+                                .style("background-color", "white")
+                                .style("border", "solid")
+                                .style("border-width", "2px")
+                                .style("border-radius", "5px")
+                                .style("padding", "2px");
+
+                // Functions that change the tooltip when users hover/move/leave cells
+                let mouseover = function (d) {
+                    d3.select(this)
+                        .select("path")
+                        .transition()
+                        .duration(750)
+                        .attr("d", arc3);
+
+                    tooltip.style("opacity", 1);
+                    d3.select(this).style("stroke", "black").style("opacity", 1);
+                }
+                let mousemove = function (d) {
+                    let label = `${d.value.toFixed(5)}% (${d.data.key})`
+                    tooltip.html(label)
+                        .style("width", label.length * 9 + "px")
+                        .style("left", 750 + "px")
+                        .style("top", 370 + "px");
+                }
+                let mouseleave = function (d) {
+                    d3.select(this)
+                        .select("path")
+                        .transition()
+                        .duration(750)
+                        .attr("d", arc2);
+
+                    tooltip.style("opacity", 0);
+                    d3.select(this).style("stroke", "none").style("opacity", 0.8);
+                }
+
+                let arcs = svg.selectAll("g.slice")    
+                            .data(dataReady)                         
+                            .enter()                           
+                            .append("svg:g")
+                            .attr("class", "slice")   
+                            .on("mouseover", mouseover)
+                            .on("mousemove", mousemove)
+                            .on("mouseleave", mouseleave);
+
+                arcs.append("svg:path")
+                    .attr("fill", function (d, i) { return color(i); })
+                    .attr("d", arc);
+
+                d3.selectAll("g.slice")
+                    .selectAll("path")
+                    .transition()
+                    .duration(750)
+                    .delay(10)
+                    .attr("d", arc2);
+
+                // Title of the doughnut chart        
+                svg.append("svg:text")
+                    .attr("class", "title")
+                    .attr("dy", ".35em")
+                    .attr("text-anchor", "middle")
+                    .text(`Weighting`);
+            }
+       
+            drawDoughnut(secDict[end]);
+
+            // Draw the text sections regarding names of RIAs and quarters
+            function drawHolder(cik, qtr) {
+                cik_dict = {
+                    "0000895421": "Morgan Stanely",
+                    "0000019617": "JPMORGAN CHASE & CO",
+                    "0001067983": "BERKSHIRE HATHAWAY INC",
+                    "0000070858": "BANK OF AMERICA CORP",
+                    "0000072971": "WELLS FARGO & COMPANY/MN",
+                    "0001450144": "TWO SIGMA SECURITIES, LLC"
+                }
+
+                let width = 400, height = 200;
+                let holder = d3.select("body")
+                                .append("svg")
+                                .attr("class", "info")
+                                .attr("width", width)    
+                                .attr("height", height)
+                                .attr("transform", "translate(800,-425)");
+
+                // Draw the element
+                holder.append("text")
+                    .style("fill", "black")
+                    .style("font-size", "24px")
+                    .attr("dy", ".35em")
+                    .attr("text-anchor", "middle")
+                    .attr("transform", "translate(200,100)")
+                    .text(cik_dict[cik]);
+
+                width = 100, height = 50;
+                let quarter = d3.select("body")
+                                .append("svg")
+                                .attr("class", "info")
+                                .attr("width", width)    
+                                .attr("height", height)
+                                .attr("transform", "translate(-35,-545)");
+
+                // Draw the element
+                quarter.append("text")
+                        .style("fill", "black")
+                        .style("font-size", "24px")
+                        .attr("dy", ".35em")
+                        .attr("text-anchor", "middle")
+                        .attr("transform", "translate(50,25)")
+                        .text(qtr);
+            }
+
+            drawHolder(cik, qtr);
+        </script>
+    </body>
+</html>

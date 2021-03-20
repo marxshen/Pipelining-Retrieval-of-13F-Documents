@@ -1,0 +1,71 @@
+[Description of project 2]
+Analysis of 13F documents in terms of RIAs and their associated securities.
+
+Statistics for securties (
+    sum of value per quarter,
+    sum of shares per quarter,
+    weighting of sum of value per quarter,
+)
+
+Statistics for RIAs (
+    sum of number of securities per quarter,
+    sum of value per quarter,
+    sum of shares per quarter,
+    change of sum of value per quarter,
+    change of sum of shares per quarter
+)
+
+[Input]
+Paris of CIKs and their corresponding quarters. For instance, (0000895421, 2020Q1).
+
+List of CIKs:
+[
+	0000895421 (Morgan Stanely, quarters ranging from 1999Q2 to 2020Q1),
+	0000019617 (JPMORGAN CHASE & CO, quarters ranging from 2015Q4 to 2020Q1),
+	0001067983 (BERKSHIRE HATHAWAY INC, quarters ranging from 2015Q3 to 2020Q1), 
+	0000070858 (BANK OF AMERICA CORP, quarters ranging from 2015Q4 to 2020Q1),
+	0000072971 (WELLS FARGO & COMPANY/MN, quarters ranging from 2015Q3 to 2020Q1),
+	0001450144 (TWO SIGMA SECURITIES, LLC, quarters ranging from 2015Q2 to 2020Q1)
+]
+
+[Pipeline structure]
+For analysis:
+1st stage: preparing the indexes (pairs of ciks and their corresponding quarters) to query.
+2nd stage: analysis of 13F documents in terms of securities 
+3rd stage: analysis of 13F documents in terms of RIAs
+
+For frontend:
+1st stage: retrieving statistics in terms of securities from 13F documents.
+2nd stage: retrieving statistics in terms of RIAs from 13F documents.
+
+[Write up]
+The number of workers needs to be adjusted to an optimal value.
+Otherwise, the scarcity of or the surplus of workers may be detrimental to the performance of the pipeline.
+
+For instance, based on the simulation in the absence of the pipeline architecture,
+if only one worker participates in the pipeline of P2/pipe.py, the execution time is around 7 minutes.
+If more than 10 workers are involved in the pipeline of P2/pipe.py, the execution time ranges from 4 to 5 minutes.
+Only 5 to 10 workers would be an optimal number of workers for implementing an efficient pipeline architecture.
+The execution time of the pipeline consisting of 5 to 10 workers is around 3 minutes.
+
+I assume that this situation may concern the competition between workers for resources either from CPU or from MYSQL.
+
+Although I practice the pipeline architecture on app.py
+to accelerate the execution time of retrieving data from the database and displaying data on the website, the outcome is futile.
+
+I think that this futile attempt may concern the excess of opening and closing MYSQL connections due to enormous queries.
+Hence, the performance of app.py still needs to be improved.
+
+From the data displayed on the website, I found that
+the portfolios of BERKSHIRE HATHAWAY INC and TWO SIGMA SECURITIES, LLC are more concentrated than other RIAs
+since both of their top 9 securities almost occupy more than 50% of the value of RIAs in recent 2 years.
+
+A pymysql.err.IntegrityError: (1048, "Column 'cik' cannot be null") occurs when P2/pipe.py is executed.
+I think that this error is not a serious issue since I discovered that this error occurs 
+when the program fails to insert a single record consisting of null columns into the database.
+Also, the data is utterly analyzed and transferred to corresponding tables, the data integrity is preserved.
+
+I assume that this error may concern pymysql internal implementation as regards MYSQL.
+
+Finally, D3.js is a useful and powerful tool to deal with interactive information visualization
+since D3.js offers a decent degree of flexibility over manipulating HTML and CSS elements when one designs various charts.
