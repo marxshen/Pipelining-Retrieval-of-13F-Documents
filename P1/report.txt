@@ -1,0 +1,90 @@
+[Description of project 1]
+Retrieve, parse and store 13F documents for 6 CIKs.
+
+The program consists of 4 stages in the pipeline architecture featuring asynchronous approaches.
+Each stage of the pipeline is assigned 6-10 workers.
+The stage 'Retrieve' in the pipeline consists of two stages 'Crawl' and 'Fetch'.
+
+Simulate the program w/o a pipeline by assigning only one worker to each stage in the pipeline architecture.
+
+The actual execution time may vary according to types of hard disks
+since reading and writing local text files are involved in the execution of the program.
+The benchmarks based on SSDs may be faster than on HDDs.
+
+I retrieve around 20 years of 13F documents for Morgan Stanely,
+but only fetch around 4 years of 13F documents for other companies
+since it is abysmally time-consuming to retrieve and parse 13F documents before August 2013.
+
+Before August 2013, every company's 13F documents differs in different formats,
+which means that I may have to write each parser for each company's 13F documents,
+even with slight changes in the formats of companies' 13F documents.
+
+After August 2013, every company seems to upload 13F documents formatted with XML.
+It is easy to retrieve and parse 13F documents with the unified format.
+
+Eventually, the numbers of records I retrieve is around 4 million,
+which may be enough to test the potential
+as regards processing vast data with the pipeline architecture of my program.
+
+[Input]
+A list of CIKs:
+[
+	Morgan Stanely,
+	JPMORGAN CHASE & CO,
+	BERKSHIRE HATHAWAY INC, 
+	BANK OF AMERICA CORP,
+	WELLS FARGO & COMPANY/MN,
+	TWO SIGMA SECURITIES, LLC
+]
+
+[1st stage: crawl.py]
+1. Reads as input a list of CIKs.
+2. Creates and returns a list of URLs linked to 13F documents.
+
+[2nd stage: fetch.py]
+1. Reads as input a list of URLs.
+2. Fetches 13F documents from the list of URLs.
+   (If 13F documents are fetched before, just skip step 2 and step 3.)
+3. Saves the 13F documents as text files serving as cached files in the folder 'CIK'.
+4. Creates and returns a list of filenames associated with the text files.
+
+[3rd stage: parse.py]
+1. Reads as input a list of file names.
+2. Retrieves 13F documents from text files in the folder 'CIK' according to the list of file names.
+   (If 13F documents are parsed before, just skip step 2, step 3, and step 4.)
+3. Parses 13F documents.
+4. Saves parsed 13F documents as text files serving as cached files in the folder 'LOAD'.
+5. Creates and returns a list of filenames associated with the text files.
+
+[4th stage: store.py]
+1. Reads as input a list of file names.
+2. Retrieves 13F documents from text files in the folder 'LOAD', and
+3. Stores 13F documents into a MySQL database according to the list of filenames.
+
+[Diagram]
+List of CIKs -> crawl.py -> List of URLs
+
+List of URLs -> fetch.py ---> List of filenames
+						  |
+						  --> Local text files as cached files in the folder 'CIK'
+
+Cached files(CIK) -->
+				    |
+List of filenames ---> parse.py ---> List of filenames
+							     |
+							     --> Parsed text files as cached files in the folder 'LOAD'
+
+Cached files(LOAD) ->
+				    |
+List of filenames ---> store.py -> records in MySQL database
+
+[Benchmarks] 
+Processes 4,174,779 records for programs w pipeline and w/o pipeline:
+
+First-time execution:
+Program w/ a pipeline: 197.730746698 secs
+Program w/o a pipeline: 275.957281626 secs
+
+Second-time execution (w/ cached files):
+Program w/ a pipeline: 80.551412663 secs
+Program w/o a pipeline: 130.233244341 secs
