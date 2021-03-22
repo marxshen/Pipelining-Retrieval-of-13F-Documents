@@ -1,4 +1,4 @@
-# Pipelining-Retrieval-of-13F-Documents
+# Pipelining Retrieval of 13F Documents
 
 [Project 1 report](https://github.com/marxshen/Pipelining-Retrieval-of-13F-Documents/blob/main/P1/report.txt)
 
