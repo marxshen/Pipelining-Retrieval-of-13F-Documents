@@ -1,7 +1,7 @@
 # Pipelining Retrieval of 13F Documents
 
 ---
-The program retrieves (crawls and fetches), parses, stores and analyzes 13F documents concerning RIAs and their associated securities. Then, it applies D3.js to visualize the stats of 13F documents with line charts, pie charts and doughnut charts.
+This program retrieves (crawls and fetches), parses, stores and analyzes 13F documents concerning RIAs and their associated securities. Then, it applies D3.js to visualize the stats of 13F documents with line charts, pie charts and doughnut charts.
 
 Its design consists of 5 stages in the pipeline architecture featuring asynchronous approaches. Each phase of the pipeline is assigned 6-10 workers.
 
